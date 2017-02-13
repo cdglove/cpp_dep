@@ -29,14 +29,20 @@ protected:
 
     void visit(include_graph_t const& g)
     {
-        include_count_.resize(boost::num_vertices(g), 0);
+        current_include_index_ = 0;
+        current_include_count_.resize(boost::num_vertices(g), 0);
         dfs_visitor<VisitPolicy::Initial> dfs(this);
         boost::depth_first_search(g, boost::visitor(dfs));
     }
     
-    int get_include_count(include_vertex_descriptor_t const& v)
+    int get_current_include_count(include_vertex_descriptor_t const& v) const
     {
-        return include_count_[v];
+        return current_include_count_[v];
+    }
+
+    int get_current_include_index() const
+    {
+        return include_index_stack_.back();
     }
 
 private:
@@ -76,15 +82,21 @@ private:
                 throw terminator();
 
             if(!is_recursing())
+            {
+                owner_->include_index_stack_.push_back(owner_->current_include_index_++);
                 owner_->derived().root_file(v, g);
+            }
             else
+            {
+                owner_->include_index_stack_.push_back(owner_->current_include_index_++);
                 owner_->derived().include_file(v, g);
+            }
         }
 
         void examine_edge(include_edge_descriptor_t const& e, include_graph_t const& g)
         {
             // If this is the first time we encounter this vertex.
-            if(owner_->include_count_[e.m_target]++ && !is_recursing())
+            if(owner_->current_include_count_[e.m_target]++ && !is_recursing())
             {
                 try 
                 {
@@ -96,6 +108,7 @@ private:
             }
             else
             {
+                owner_->include_index_stack_.push_back(owner_->current_include_index_++);
                 owner_->derived().include_file(e.m_target, g);
             }
         }
@@ -103,6 +116,7 @@ private:
         void finish_vertex(include_vertex_descriptor_t const& v, include_graph_t const& g)
         {
             owner_->derived().finish_file(v, g);
+            owner_->include_index_stack_.pop_back();
         }
 
     private:
@@ -115,7 +129,9 @@ private:
         inferred_include_visitor* owner_;
     };
 
-    std::vector<int> include_count_;
+    std::vector<int> current_include_count_;
+    std::vector<int> include_index_stack_;
+    int current_include_index_;
 };
 
 } // namespace cpp_dep
